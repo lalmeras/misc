@@ -1,0 +1,13 @@
+[Unit]
+Description=Network bridge configuration
+After=network.target
+
+[Service]
+ExecStart=/usr/sbin/sysctl -p /etc/sysctl.d/bridge.conf
+RemainAfterExit=yes
+StandardOutput=syslog
+StandardError=inherit
+
+[Install]
+WantedBy=basic.target
+

@@ -1,0 +1,8 @@
+TYPE=Ethernet
+BOOTPROTO=none
+DEVICE=wlp1s0
+NAME=wlp1s0
+UUID=aaf5e0bd-5a17-459a-94a7-b3d39f95ffc1
+ONBOOT=no
+HWADDR=00:15:af:db:00:6f
+NM_CONTROLLED=no
