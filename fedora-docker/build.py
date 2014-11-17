@@ -8,6 +8,7 @@ import shutil
 import string
 import threading
 import argparse
+import datetime
 import sh
 import blessings
 
@@ -103,6 +104,8 @@ class Processor(object):
     def stderr(self):
         return self._callback(self.err_level)
 
+start_time = datetime.datetime.now()
+
 yum_repos_d = tempfile.mkdtemp(prefix = 'yum_repos_d_')
 yum_conf = tempfile.mkstemp(prefix = 'yum_conf_')[1]
 
@@ -130,16 +133,15 @@ except:
 logger.info('Installing packages %s' % (', '.join(package_list), ))
 processor = Processor(logger, logging.DEBUG, logging.WARN)
 with processor:
-    print sh.yum(
-    	sh.cat('resources/packages'),
+    sh.yum(
     	'-y', '--releasever=21',
     	'-c', yum_conf,
     	'--installroot=%s' % (args.root, ),
     	'install',
         *package_list,
     	_out=processor.stdout(), _err=processor.stderr(),
-        _tty_out=False
-    )
+        _tty_out=False, _bg=False
+    ).wait()
 logger.info('Installing packages done')
 
 shutil.copy('resources/locale.sh', '%s/root' % (args.root, ))
@@ -147,11 +149,13 @@ shutil.copy('resources/locale.sh', '%s/root' % (args.root, ))
 logger.info('Cleaning')
 with processor:
     sh.chroot(args.root, '/root/locale.sh',
-            _out=processor.stdout(), _err=processor.stderr())
+            _out=processor.stdout(), _err=processor.stderr()).wait()
     sh.chroot(args.root, 'yum', 'clean', 'all',
-            _out=processor.stdout(), _err=processor.stderr())
+            _out=processor.stdout(), _err=processor.stderr()).wait()
 logger.info('Cleaning done')
 
 image_size = sh.cut(
-        sh.du('-sh', args.root), '-f1')
+        sh.du('-sh', args.root), '-f1').replace('\n', '')
 logger.info('Image size %s' % (image_size, ))
+ellapsed_time = datetime.datetime.now() - start_time
+logger.info('Total elapsed time %s' % (ellapsed_time, ))
