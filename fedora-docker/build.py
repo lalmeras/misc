@@ -63,6 +63,13 @@ class Processor(object):
         self.progress = 0
         self.width = self.terminal.width - 1
 
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        sys.stdout.write(self.terminal.clear_eol)
+        sys.stdout.write('\r')
+
     def _log(self, level, line):
         with self.lock:
             sys.stdout.write(self.terminal.clear_eol)
@@ -113,25 +120,37 @@ logger.info('Copying rpm configuration in %s' % (rpm_dir, ))
 sh.mkdir('-p', rpm_dir)
 shutil.copy('resources/macros.langs', rpm_dir)
 
-logger.info('Installing packages')
+try:
+    with open('resources/packages') as package_file:
+        package_list = [line.replace('\n', '') for line in package_file]
+except:
+    logger.error('Error reading package list')
+    sys.exit(1)
+
+logger.info('Installing packages %s' % (', '.join(package_list), ))
 processor = Processor(logger, logging.DEBUG, logging.WARN)
-print sh.xargs.yum(
-	sh.cat('resources/packages'),
-	'-y', '--releasever=21',
-	'-c', yum_conf,
-	'--installroot=%s' % (args.root, ),
-	'install',
-	_out=processor.stdout(), _err=processor.stderr(),
-    _tty_out=False
-)
+with processor:
+    print sh.yum(
+    	sh.cat('resources/packages'),
+    	'-y', '--releasever=21',
+    	'-c', yum_conf,
+    	'--installroot=%s' % (args.root, ),
+    	'install',
+        *package_list,
+    	_out=processor.stdout(), _err=processor.stderr(),
+        _tty_out=False
+    )
+logger.info('Installing packages done')
 
 shutil.copy('resources/locale.sh', '%s/root' % (args.root, ))
 
-logger.info('CLeaning')
-sh.chroot(args.root, '/root/locale.sh',
-        _out=processor.stdout(), _err=processor.stderr())
-sh.chroot(args.root, 'yum', 'clean', 'all',
-        _out=processor.stdout(), _err=processor.stderr())
+logger.info('Cleaning')
+with processor:
+    sh.chroot(args.root, '/root/locale.sh',
+            _out=processor.stdout(), _err=processor.stderr())
+    sh.chroot(args.root, 'yum', 'clean', 'all',
+            _out=processor.stdout(), _err=processor.stderr())
+logger.info('Cleaning done')
 
 image_size = sh.cut(
         sh.du('-sh', args.root), '-f1')
