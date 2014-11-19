@@ -9,17 +9,32 @@ import string
 import threading
 import argparse
 import datetime
+import os.path
+import glob
+import re
 import sh
 import blessings
 
+#sh.logging_enabled = True
+
+releases = [os.path.basename(folder) for folder in glob.glob('resources/releases/*')]
+
 parser = argparse.ArgumentParser(description='Docker image building tool')
+parser.add_argument('-r', '--release', action='store', required=True, choices=releases)
+parser.add_argument('-a', '--arch', action='store', required=True, choices=('i386', 'x86_64'))
 parser.add_argument('-v', '--verbose', action='store_true')
 parser.add_argument('-q', '--quiet', action='store_true')
 parser.add_argument('root')
 
 args = parser.parse_args()
+releasever = re.findall(r'[0-9]+', args.release)[0]
+if args.arch == 'i386':
+    arch_wrapper = sh.linux32
+else:
+    arch_wrapper = sh.linux64
 
-level = logging.INFO
+#level = logging.INFO
+level = logging.DEBUG
 if args.verbose:
     level = logging.DEBUG
 elif args.quiet:
@@ -85,7 +100,7 @@ class Processor(object):
             sys.stdout.write('[')
             sys.stdout.write(Processor.PROGRESS[offset])
             sys.stdout.write('] ')
-            sys.stdout.write(line.strip().translate(Processor.CONTROL_CHARS_TRANS))
+            sys.stdout.write(line.translate(Processor.CONTROL_CHARS_TRANS))
             sys.stdout.write('\r')
             sys.stdout.flush()
             self.state = Processor.STATE_PROGRESS
@@ -112,11 +127,11 @@ yum_conf = tempfile.mkstemp(prefix = 'yum_conf_')[1]
 logger.info('Using temporary configuration %s - %s' %
 	(yum_repos_d, yum_conf))
 
-shutil.copyfile('resources/yum.conf', yum_conf)
+shutil.copyfile('resources/releases/%s/yum.conf' % (args.release, ), yum_conf)
 with open(yum_conf, 'a') as f:
 	f.write('reposdir=%s' % (yum_repos_d, ))
 
-sh.cp('-ar', sh.glob('resources/yum.repos.d/*'), yum_repos_d)
+sh.cp('-ar', sh.glob('resources/releases/%s/yum.repos.d/*' % (args.release, )), yum_repos_d)
 
 rpm_dir = '%s/etc/rpm' % (args.root, )
 logger.info('Copying rpm configuration in %s' % (rpm_dir, ))
@@ -133,26 +148,42 @@ except:
 logger.info('Installing packages %s' % (', '.join(package_list), ))
 processor = Processor(logger, logging.DEBUG, logging.WARN)
 with processor:
-    sh.yum(
-    	'-y', '--releasever=21',
-    	'-c', yum_conf,
-    	'--installroot=%s' % (args.root, ),
-    	'install',
-        *package_list,
-    	_out=processor.stdout(), _err=processor.stderr(),
-        _tty_out=False, _bg=False
-    ).wait()
+    with arch_wrapper(_with=True):
+        sh.yum(
+        	'-y', '--releasever=%s' % (releasever, ),
+        	'-c', yum_conf,
+        	'--installroot=%s' % (args.root, ),
+            '--nogpgcheck',
+        	'install',
+            *package_list,
+            _encoding='utf-8',
+            _decode_errors='replace',
+        	_out=processor.stdout(), _err=processor.stderr(),
+            _tty_out=False
+        ).wait()
 logger.info('Installing packages done')
 
-shutil.copy('resources/locale.sh', '%s/root' % (args.root, ))
+with processor:
+    with sh.chroot(args.root, _with=True):
+        sh.rm('-rf', '/var/lib/rpm/__db*', _out=processor.stdout(), _err=processor.stderr()).wait()
+        sh.rpm('--rebuilddb',  _out=processor.stdout(), _err=processor.stderr()).wait()
+
+shutil.copy('resources/locale.sh', '%s/root/' % (args.root, ))
 
 logger.info('Cleaning')
 with processor:
-    sh.chroot(args.root, '/root/locale.sh',
+    sh.chroot(args.root, 'yum', 'history', 'new',
             _out=processor.stdout(), _err=processor.stderr()).wait()
     sh.chroot(args.root, 'yum', 'clean', 'all',
             _out=processor.stdout(), _err=processor.stderr()).wait()
+    sh.chroot(args.root, '/root/locale.sh',
+            _out=processor.stdout(), _err=processor.stderr()).wait()
 logger.info('Cleaning done')
+
+shutil.copy('/etc/resolv.conf', '%s/etc/' % (args.root, ))
+with arch_wrapper(_with=True):
+    sh.chroot(args.root, 'yum', 'list', 'installed',
+        _out=processor.stdout(), _err=processor.stderr()).wait()
 
 image_size = sh.cut(
         sh.du('-sh', args.root), '-f1').replace('\n', '')
