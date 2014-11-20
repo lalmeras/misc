@@ -33,8 +33,7 @@ if args.arch == 'i386':
 else:
     arch_wrapper = sh.linux64
 
-#level = logging.INFO
-level = logging.DEBUG
+level = logging.INFO
 if args.verbose:
     level = logging.DEBUG
 elif args.quiet:
@@ -119,6 +118,56 @@ class Processor(object):
     def stderr(self):
         return self._callback(self.err_level)
 
+class shelper(object):
+    def __init__(self):
+        self._chroot = None
+        self._processor = None
+        self._arch = None
+
+    def chroot(self, chroot):
+        self._chroot = chroot
+        return self
+
+    def processor(self, processor):
+        self._processor = processor
+        return self
+
+    def arch(self, arch):
+        self._arch = arch
+        return self
+
+    def run(self, command, *args, **kwargs):
+        args = list(args)
+        kwargs = dict(**kwargs)
+        cmd = command
+        if self._chroot is not None:
+            args.insert(0, cmd._path)
+            args.insert(0, self._chroot)
+            cmd = sh.chroot
+        if self._arch is not None:
+            args.insert(0, cmd._path)
+            cmd = self._arch
+        if self._processor is not None:
+            kwargs['_out'] = self._processor.stdout()
+            kwargs['_err'] = self._processor.stderr()
+            kwargs['_tty_out'] = False
+        kwargs['_decode_errors'] = 'replace'
+        if self._processor is not None:
+            with self._processor:
+                result = cmd(*args, **kwargs).wait()
+        else:
+            result = cmd(*args, **kwargs)
+        return result
+
+def fake_command(cmd):
+    command = sh.Command('/bin/true')
+    command._path = cmd
+    return command
+
+yum = fake_command('/usr/bin/yum')
+locale = fake_command('/root/locale.sh')
+rpm = fake_command('/bin/rpm')
+
 start_time = datetime.datetime.now()
 
 yum_repos_d = tempfile.mkdtemp(prefix = 'yum_repos_d_')
@@ -135,7 +184,8 @@ sh.cp('-ar', sh.glob('resources/releases/%s/yum.repos.d/*' % (args.release, )), 
 
 rpm_dir = '%s/etc/rpm' % (args.root, )
 logger.info('Copying rpm configuration in %s' % (rpm_dir, ))
-sh.mkdir('-p', rpm_dir)
+##sh.mkdir('-p', rpm_dir)
+shelper().run(sh.mkdir, '-p', rpm_dir)
 shutil.copy('resources/macros.langs', rpm_dir)
 
 try:
@@ -147,43 +197,30 @@ except:
 
 logger.info('Installing packages %s' % (', '.join(package_list), ))
 processor = Processor(logger, logging.DEBUG, logging.WARN)
-with processor:
-    with arch_wrapper(_with=True):
-        sh.yum(
-        	'-y', '--releasever=%s' % (releasever, ),
-        	'-c', yum_conf,
-        	'--installroot=%s' % (args.root, ),
-            '--nogpgcheck',
-        	'install',
-            *package_list,
-            _encoding='utf-8',
-            _decode_errors='replace',
-        	_out=processor.stdout(), _err=processor.stderr(),
-            _tty_out=False
-        ).wait()
+shelper().arch(arch_wrapper).processor(processor).run(
+        yum,
+        '-y', '--releasever=%s' % (releasever, ),
+        '-c', yum_conf,
+        '--installroot=%s' % (args.root, ),
+        '--nogpgcheck',
+        'install',
+        *package_list
+)
 logger.info('Installing packages done')
 
-with processor:
-    with sh.chroot(args.root, _with=True):
-        sh.rm('-rf', '/var/lib/rpm/__db*', _out=processor.stdout(), _err=processor.stderr()).wait()
-        sh.rpm('--rebuilddb',  _out=processor.stdout(), _err=processor.stderr()).wait()
+shelper().processor(processor).chroot(args.root).run(sh.rm, '-rf', '/var/lib/rpm/__db*')
+shelper().processor(processor).chroot(args.root).run(rpm, '--rebuilddb')
 
 shutil.copy('resources/locale.sh', '%s/root/' % (args.root, ))
 
 logger.info('Cleaning')
-with processor:
-    sh.chroot(args.root, 'yum', 'history', 'new',
-            _out=processor.stdout(), _err=processor.stderr()).wait()
-    sh.chroot(args.root, 'yum', 'clean', 'all',
-            _out=processor.stdout(), _err=processor.stderr()).wait()
-    sh.chroot(args.root, '/root/locale.sh',
-            _out=processor.stdout(), _err=processor.stderr()).wait()
+shelper().arch(arch_wrapper).processor(processor).chroot(args.root).run(yum, 'history', 'new')
+shelper().arch(arch_wrapper).processor(processor).chroot(args.root).run(yum, 'clean', 'all')
+shelper().arch(arch_wrapper).processor(processor).chroot(args.root).run(locale)
 logger.info('Cleaning done')
 
 shutil.copy('/etc/resolv.conf', '%s/etc/' % (args.root, ))
-with arch_wrapper(_with=True):
-    sh.chroot(args.root, 'yum', 'list', 'installed',
-        _out=processor.stdout(), _err=processor.stderr()).wait()
+shelper().arch(arch_wrapper).processor(processor).chroot(args.root).run(rpm, '-qa')
 
 image_size = sh.cut(
         sh.du('-sh', args.root), '-f1').replace('\n', '')
