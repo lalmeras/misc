@@ -159,6 +159,10 @@ class shelper(object):
             result = cmd(*args, **kwargs)
         return result
 
+# python-sh checks command before to run it
+# it can be problematic for chrooted commands
+# full path is also a must, as path resolution
+# can be erroneous in chroot environment
 def fake_command(cmd):
     command = sh.Command('/bin/true')
     command._path = cmd
@@ -168,8 +172,10 @@ yum = fake_command('/usr/bin/yum')
 locale = fake_command('/root/locale.sh')
 rpm = fake_command('/bin/rpm')
 
+# for execution timing
 start_time = datetime.datetime.now()
 
+# configuration choosen by release
 yum_repos_d = tempfile.mkdtemp(prefix = 'yum_repos_d_')
 yum_conf = tempfile.mkstemp(prefix = 'yum_conf_')[1]
 
