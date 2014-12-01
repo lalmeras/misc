@@ -11,9 +11,11 @@ import argparse
 import datetime
 import os.path
 import glob
+import tarfile
 import re
 import sh
 import blessings
+import humanize
 
 #sh.logging_enabled = True
 
@@ -22,16 +24,28 @@ releases = [os.path.basename(folder) for folder in glob.glob('resources/releases
 parser = argparse.ArgumentParser(description='Docker image building tool')
 parser.add_argument('-r', '--release', action='store', required=True, choices=releases)
 parser.add_argument('-a', '--arch', action='store', required=True, choices=('i386', 'x86_64'))
-parser.add_argument('-v', '--verbose', action='store_true')
-parser.add_argument('-q', '--quiet', action='store_true')
+parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+parser.add_argument('-q', '--quiet', action='store_true', help='Run quietly')
+parser.add_argument('-t', '--tar-archive', action='store', help='Target archive file name')
+parser.add_argument('-f', '--force', action='store_true', help='Allow existing path as root path')
+parser.add_argument('-di', '--docker-import', action='store', help='Store as a docker image')
 parser.add_argument('root')
 
 args = parser.parse_args()
-releasever = re.findall(r'[0-9]+', args.release)[0]
-if args.arch == 'i386':
-    arch_wrapper = sh.linux32
-else:
-    arch_wrapper = sh.linux64
+
+def du(path):
+    size = 0
+    for root, dirs, files in os.walk(path):
+        for f in files:
+            f = os.path.join(root, f)
+            if os.path.isfile(f):
+                try:
+                    fsize = os.path.getsize(os.path.join(root, f))
+                    size = size + fsize
+                except Exception, e:
+                    logger.warn('Error determining %s size' % f, exc_info=True)
+    return size
+            
 
 level = logging.INFO
 if args.verbose:
@@ -60,6 +74,48 @@ logging.config.dictConfig({
     }
 })
 logger = logging.getLogger('main')
+
+if os.path.lexists(args.root):
+    if os.path.isdir(args.root):
+        if not args.force:
+            logger.error('Path %s already exists. Use -f option to force execution. Aborted.' % (args.root, ))
+            exit(1)
+        else:
+            logger.info('Using already created path %s' % (args.root, ))
+    else:
+        logger.error('%s already exists and is not a path. Aborted.' % (args.root, ))
+else:
+    os.makedirs(args.root)
+
+archive = args.tar_archive
+if archive is None:
+    if os.path.basename(args.root) == '':
+        logger.error('Empty archive file name ; archive will not be created.')
+    else:
+        archive_candidate = os.path.basename(args.root) + '.tar.bz2'
+        if os.path.lexists(archive_candidate):
+            logger.warn('Archive %s already exists. archive will not be created.' % (archive_candidate, ))
+        else:
+            archive = archive_candidate
+            logger.info('Using %s as target archive' % (archive_candidate, ))
+
+tar_flag = None
+if archive is not None:
+    if os.path.lexists(archive):
+        logger.warn('Archive %s already exists. archive will not be created.' % (archive, ))
+        archive = None
+    if archive.endswith('.tar'):
+        tar_flag = ''
+    elif archive.endswith('.tar.gz'):
+        tar_flag = ':gz'
+    elif archive.endswith('.tar.bz2'):
+        tar_flag = ':bz2'
+
+releasever = re.findall(r'[0-9]+', args.release)[0]
+if args.arch == 'i386':
+    arch_wrapper = sh.linux32
+else:
+    arch_wrapper = sh.linux64
 
 class Processor(object):
     STATE_START = 1
@@ -190,7 +246,6 @@ sh.cp('-ar', sh.glob('resources/releases/%s/yum.repos.d/*' % (args.release, )), 
 
 rpm_dir = '%s/etc/rpm' % (args.root, )
 logger.info('Copying rpm configuration in %s' % (rpm_dir, ))
-##sh.mkdir('-p', rpm_dir)
 shelper().run(sh.mkdir, '-p', rpm_dir)
 shutil.copy('resources/macros.langs', rpm_dir)
 
@@ -214,7 +269,7 @@ shelper().arch(arch_wrapper).processor(processor).run(
 )
 logger.info('Installing packages done')
 
-shelper().processor(processor).chroot(args.root).run(sh.rm, '-rf', '/var/lib/rpm/__db*')
+shelper().processor(processor).chroot(args.root).run(sh.rm, '-rf', '/var/lib/rpm/__db*', '/var/lib/rpm/Name')
 shelper().processor(processor).chroot(args.root).run(rpm, '--rebuilddb')
 
 shutil.copy('resources/locale.sh', '%s/root/' % (args.root, ))
@@ -228,8 +283,20 @@ logger.info('Cleaning done')
 shutil.copy('/etc/resolv.conf', '%s/etc/' % (args.root, ))
 shelper().arch(arch_wrapper).processor(processor).chroot(args.root).run(rpm, '-qa')
 
-image_size = sh.cut(
-        sh.du('-sh', args.root), '-f1').replace('\n', '')
-logger.info('Image size %s' % (image_size, ))
-ellapsed_time = datetime.datetime.now() - start_time
-logger.info('Total elapsed time %s' % (ellapsed_time, ))
+image_size = du(args.root)
+logger.info('Image size : %s' % humanize.naturalsize(image_size))
+last_step_time = datetime.datetime.now()
+installation_ellapsed_time = last_step_time - start_time
+logger.info('Installation elapsed time %s' % (installation_ellapsed_time, ))
+
+if archive is not None:
+    with tarfile.open(archive, 'w' + tar_flag) as archive_tar:
+        archive_tar.add(args.root, '/')
+    tar_ellapsed_time = datetime.datetime.now() - last_step_time
+    last_step_time = datetime.datetime.now()
+    logger.info('Archive elapsed time %s' % (tar_ellapsed_time, ))
+    logger.info('Archive size : %s' % humanize.naturalsize(os.path.getsize(archive)))
+
+    if args.docker_import is not None:
+        with open(archive, 'r') as archivef:
+            shelper().processor(processor).run(sh.docker, 'import', '-', args.docker_import, _in=archivef, _in_bufsize=10000000)
