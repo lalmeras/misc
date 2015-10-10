@@ -6,18 +6,16 @@ call vundle#begin()
 Plugin 'gmarik/Vundle.vim'
 " sensible defaults
 Plugin 'tpope/vim-sensible'
-" jedi based completion
-Plugin 'Valloric/YouCompleteMe'
 " load .vimrc files in folder hierarchy
 Plugin 'MarcWeber/vim-addon-local-vimrc'
 " session and recent files management
 Plugin 'mhinz/vim-startify'
 " multiples colorschmes
 Plugin 'flazz/vim-colorschemes'
-" custom python syntax
-Plugin 'hdima/python-syntax'
 " python validation
 Plugin 'nvie/vim-flake8'
+" python mode
+Bundle 'klen/python-mode'
 
 call vundle#end()
 
@@ -39,5 +37,4 @@ set background=dark
 " python-syntax all rules
 let g:python_highlight_all = 1
 " colorscheme configuration
-let g:solarized_termcolors=256
-colorscheme solarized
+colorscheme desertEx
