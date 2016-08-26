@@ -5,15 +5,15 @@ http_port 3128 ssl-bump \
 sslcrtd_program /usr/lib64/squid/ssl_crtd -s __HERE__/ssl_db -M 4MB
 
 pid_filename __HERE__/run/squid.pid
-access_log stdio:__HERE__/log/access.log
+access_log stdio:__HERE__/log/access.log combined
 cache_log __HERE__/log/cache.log
+cache_store_log __HERE__/log/store.log
+#debug_options ALL,2
 
-minimum_object_size 0 KB
-maximum_object_size 300 MB
-# force cache on basic auth / without cache directive
-refresh_pattern . 0 90% 432000 ignore-auth reload-into-ims
 # 5Go cache
-cache_dir aufs __HERE__/cache 5000 256 256
+cache_dir aufs __HERE__/cache 7000 256 256
+minimum_object_size 0 KB
+maximum_object_size 350 MB
 
 # ACLs
 acl lan src all
@@ -21,6 +21,9 @@ acl step1 at_step SslBump1
 
 http_access allow lan
 http_access deny all
+
+# force cache on basic auth / without cache directive
+refresh_pattern . 0 90% 432000 ignore-auth ignore-reload reload-into-ims
 
 ssl_bump peek step1
 ssl_bump bump all
