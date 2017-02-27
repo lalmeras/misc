@@ -1,0 +1,4 @@
+i#!/bin/sh
+
+robocfg vlan 100 ports "0t 4t 5t"
+
