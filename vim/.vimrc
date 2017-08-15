@@ -8,7 +8,7 @@ call vundle#begin()
 
 "Plugin 'godlygeek/tabular'
 " let Vundle manage Vundle, required
-Plugin 'gmarik/Vundle.vim'
+" Plugin 'gmarik/Vundle.vim'
 " sensible defaults
 Plugin 'tpope/vim-sensible'
 " load .vimrc files in folder hierarchy
