@@ -10,7 +10,7 @@ if [ ! -f "$HERE/ssl_cert/myCA.pem" ]; then
 fi
 
 if [ ! -d "$HERE/ssl_db" ]; then
-	/usr/lib64/squid/ssl_crtd -c -s "$HERE/ssl_db/"
+	/usr/lib64/squid/security_file_certgen -c -s "$HERE/ssl_db/"
 fi
 
 if which squid > /dev/null; then
