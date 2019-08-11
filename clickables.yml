@@ -1,0 +1,8 @@
+---
+ansible:
+  virtualenv:
+    selinux: false
+    path: .tools/virtualenv
+    python: python3
+    requirements:
+      - ansible == 2.7.1

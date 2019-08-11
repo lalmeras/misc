@@ -1,4 +1,18 @@
 vim/.vim/bundle/*
 !vim/.vim/bundle/Vundle.vim
 
-*.swp
+dependencies/galaxy-roles
+run/*
+.tools/
+.vault_pass.txt
+poetry.lock
+*.retry
+ansible.log
+
+*.pyc
+__pycache__
+.*.swp
+*.egg-info
+
+!.gitkeep
+

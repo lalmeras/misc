@@ -1,0 +1,12 @@
+---
+
+- hosts: "{{ common_hosts }}"
+  roles:
+    - powo.rpmfusion
+  tasks:
+    - package:
+        name: steam
+      become: true
+      become_user: root
+
+

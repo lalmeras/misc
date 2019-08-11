@@ -1,0 +1,12 @@
+---
+
+name: unused_name
+channels:
+  - defaults
+dependencies:
+  - python=3
+  - pip
+  - pip:
+     - poetry
+     - virtualenv
+
