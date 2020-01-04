@@ -3,7 +3,7 @@ name = "misc"
 # this is a fake/unused version
 version = "0.1.0"
 description = ""
-authors = ""
+authors = ["misc <https://github.com/lalmeras/misc>"]
 
 [tool.poetry.dependencies]
 python = ">=3.5"
