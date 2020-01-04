@@ -30,3 +30,6 @@ def main(ctx):
 clickable_ansible.run_playbook_task(main, 'steam', 'playbooks/steam.yml',
         common_hosts='localhost',
         help='Install Steam')
+clickable_ansible.run_playbook_task(main, 'minecraft', 'playbooks/minecraft.yml',
+        common_hosts='localhost',
+        help='Install Minecraft')

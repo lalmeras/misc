@@ -1,0 +1,67 @@
+---
+
+- hosts: all
+  tasks:
+    - name: folders
+      with_items:
+        - ~/Documents/tools
+        - ~/Documents/apps
+        - ~/Documents/apps/Minecraft
+        - ~/.minecraft-bin
+        - ~/.minecraft-bin/assets
+        - ~/.minecraft-bin/libraries
+        - ~/.minecraft-bin/bin
+        - ~/.minecraft-bin/versions
+        - ~/.minecraft-bin/resourcepacks
+      file:
+        state: directory
+        path: "{{ item }}"
+    - name: java
+      become: true
+      become_user: root
+      package:
+        name: java-11-openjdk-headless
+    - name: download
+      get_url:
+        url: https://launcher.mojang.com/download/Minecraft.tar.gz
+        dest: ~/Documents/tools/Minecraft.tar.gz
+    - name: install
+      unarchive:
+        src: ~/Documents/tools/Minecraft.tar.gz
+        dest: ~/Documents/apps/Minecraft
+        extra_opts:
+          - --strip-components=1
+    - name: symlinks
+      # store .minecraft in cloud
+      # store binary assets only locally, in .minecraft-bin
+      with_items:
+        - path: ~/.minecraft
+          target: ~/Mycloud/Games/Minecraft
+        - path: ~/.minecraft/assets
+          target: ~/.minecraft-bin/assets
+        - path: ~/.minecraft/libraries
+          target: ~/.minecraft-bin/libraries
+        - path: ~/.minecraft/bin
+          target: ~/.minecraft-bin/bin
+        - path: ~/.minecraft/versions
+          target: ~/.minecraft-bin/versions
+        - path: ~/.minecraft/resourcepacks
+          target: ~/.minecraft-bin/resourcepacks
+      file:
+        state: link
+        dest: "{{ item.path }}"
+        src: "{{ item.target }}"
+    - name: .desktop file
+      copy:
+        # modify cwd so that GPUCache is not created in $HOME
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=Minecraft
+          Comment=Minecraft Launcher
+          Path={{ '~' | expanduser }}/.minecraft
+          Exec={{ '~' | expanduser | quote }}/Documents/apps/Minecraft/minecraft-launcher
+          Icon={{ '~' | expanduser }}/.minecraft/minecraft.png
+          Terminal=false
+          Categories=Game;ActionGame;AdventureGame;RolePlaying;
+        dest: ~/.local/share/applications/minecraft-launcher.desktop
